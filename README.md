@@ -98,7 +98,18 @@ Edits take effect after `/reload-plugins`, with no reinstall.
 
 ## 🎛️ Tuning
 
-Everything lives in [`hooks/register.ts`](hooks/register.ts):
+### Mode
+
+One setting, `mode`, in the plugin's config menu:
+
+| Value | What it does |
+| --- | --- |
+| `model-and-effort` (default) | Picks model and effort per prompt; the cache guard decides when a switch is worth it. |
+| `effort-only` | Keeps your session's model on every turn and changes only the effort. The prompt cache is never lost. |
+
+### Constants
+
+Everything else lives in [`hooks/register.ts`](hooks/register.ts):
 
 | Constant | What it controls |
 | --- | --- |

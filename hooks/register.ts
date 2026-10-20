@@ -69,7 +69,9 @@ async function choose(
   return isHot && isBig ? { model: current, isKept: true } : { model: target, isKept: false };
 }
 
-export const register: Register = (on) => {
+export const register: Register = (on, options) => {
+  // effort-only keeps the session's model on every turn, so no cache is ever lost.
+  const isEffortOnly = options?.mode === "effort-only";
   let pick: Pick | undefined;
   // Last time each model family answered on the main loop, and the model that last ran.
   const lastUsed = new Map<number, number>();
@@ -103,7 +105,12 @@ export const register: Register = (on) => {
     if (e.agentId !== undefined || !pick) return yield* next(e);
 
     if (turn?.id !== e.turnId) {
-      turn = { id: e.turnId, ...(await choose($, IDS[pick.tier], e.model, pick.urgent, current, lastUsed)) };
+      turn = {
+        id: e.turnId,
+        ...(isEffortOnly
+          ? { model: e.model, isKept: false }
+          : await choose($, IDS[pick.tier], e.model, pick.urgent, current, lastUsed)),
+      };
     }
     const { model, isKept } = turn;
     const effort = rankOf(model) === 0 ? undefined : pick.effort;

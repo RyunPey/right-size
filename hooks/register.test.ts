@@ -106,6 +106,16 @@ test('never picks above the session model, even when urgent', async ($, on) => {
   expect(await turn('t1', 'claude-sonnet-5-5')).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
 })
 
+test('effort-only keeps the session model and applies the effort', { options: { mode: 'effort-only' } }, async ($, on) => {
+  const { turn } = setup($, on, [answer('haiku low normal')], 0)
+  expect(await turn('t1')).toEqual({ model: 'claude-opus-5-5', effort: 'low' })
+})
+
+test('effort-only ignores an urgent pick for the model', { options: { mode: 'effort-only' } }, async ($, on) => {
+  const { turn } = setup($, on, [answer('opus xhigh urgent')], 0)
+  expect(await turn('t1', 'claude-sonnet-5-5')).toEqual({ model: 'claude-sonnet-5-5', effort: 'xhigh' })
+})
+
 test('leaves the request alone when the judge fails', async ($, on) => {
   const { turn } = setup($, on, [{ isAnswered: false, reason: 'empty-reply', usage }], 0)
   expect(await turn('t1')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
