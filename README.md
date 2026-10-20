@@ -24,7 +24,7 @@ sonnet · medium
 
 Before each turn, a quick Haiku call reads your prompt and picks a model and an effort level. A cache guard then checks whether switching models is worth it: in a big chat with a hot cache, it keeps the current model and changes effort only. The result applies to every model request in that turn, and one status line under the prompt tells you what ran.
 
-No panels. No bars. No settings screens. No eye cancer.
+No panels. No bars. No settings screens.
 
 ## 🔀 How it works
 
