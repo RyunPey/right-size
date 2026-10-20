@@ -66,14 +66,35 @@ sonnet · medium (ran claude-opus-5-5)
 
 ## 📦 Install
 
-Not published yet. Install it from a local copy of this folder:
+**In Claude Code**, at the prompt of a terminal session:
+
+```
+/plugin install right-size --marketplace RyunPey/right-size
+```
+
+Answer `y` to add the marketplace, then pick a scope (user is the first choice and applies to all your sessions). The mod is active right away, no restart needed.
+
+**From a shell:**
 
 ```bash
-claude plugin marketplace add <path to this folder>
+claude plugin install right-size --marketplace RyunPey/right-size
+```
+
+**In the desktop app**, where `/plugin` doesn't run: click **+** next to the prompt box, then **Plugins**, **Add marketplace** with `RyunPey/right-size`, then **Add plugin**. A mod installed from a terminal at the user scope also loads in the desktop app's local sessions.
+
+<details>
+<summary>🧑‍💻 Working on right-size itself</summary>
+
+Install from your local clone instead. Claude Code then reads the mod straight from the folder:
+
+```bash
+claude plugin marketplace add <path to your clone>
 claude plugin install right-size@right-size --scope user
 ```
 
-It then runs in every terminal session and in the desktop app's local sessions. Edits to the folder take effect after `/reload-plugins`.
+Edits take effect after `/reload-plugins`, with no reinstall.
+
+</details>
 
 ## 🎛️ Tuning
 
