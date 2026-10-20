@@ -1,6 +1,6 @@
 {
   "name": "right-size",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Picks model and effort per prompt with a quick Haiku judge; shows the pick as one status line.",
   "userConfig": {
     "mode": {
@@ -8,7 +8,10 @@
       "title": "Mode",
       "description": "model-and-effort changes the model and the effort per prompt. effort-only keeps your session's model and changes only the effort, so the prompt cache is never lost.",
       "default": "model-and-effort",
-      "options": ["model-and-effort", "effort-only"]
+      "options": [
+        "model-and-effort",
+        "effort-only"
+      ]
     }
   }
 }

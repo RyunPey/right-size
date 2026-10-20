@@ -17,6 +17,7 @@ const IDS: Record<Tier, string> = {
   opus: "claude-opus-5-5",
 };
 const NAMES = ["haiku", "sonnet", "opus", "fable"];
+const MODES = ["model-and-effort", "effort-only"];
 
 // How long a model's prompt cache stays warm after its last request. Claude Code
 // subscriptions mostly get one hour; set 5 minutes for the API's default cache.
@@ -72,6 +73,26 @@ async function choose(
 export const register: Register = (on, options) => {
   // effort-only keeps the session's model on every turn, so no cache is ever lost.
   const isEffortOnly = options?.mode === "effort-only";
+
+  // /right-size-mode switches the mode from any surface, the desktop app included.
+  on("session.start", async ($, e, next) => {
+    await $.command.register({
+      name: "right-size-mode",
+      description: "Show or set right-size's mode: model-and-effort or effort-only",
+      argumentHint: MODES.join(" | "),
+    });
+    return next(e);
+  });
+
+  on("command.run", { command: "right-size-mode" }, async ($, e) => {
+    const value = e.args.trim();
+    const now = isEffortOnly ? "effort-only" : "model-and-effort";
+    if (!MODES.includes(value)) {
+      return { text: `right-size mode: ${now}. Set it with /right-size-mode ${MODES.join(" or ")}.` };
+    }
+    const { deny } = await $.config.set({ key: "right-size.mode", value });
+    return { text: deny ? `right-size mode not changed: ${deny}` : `right-size mode set to ${value}.` };
+  });
   let pick: Pick | undefined;
   // Last time each model family answered on the main loop, and the model that last ran.
   const lastUsed = new Map<number, number>();

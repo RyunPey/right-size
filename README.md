@@ -107,6 +107,8 @@ One setting, `mode`, in the plugin's config menu:
 | `model-and-effort` (default) | Picks model and effort per prompt; the cache guard decides when a switch is worth it. |
 | `effort-only` | Keeps your session's model on every turn and changes only the effort. The prompt cache is never lost. |
 
+Change it from any surface, the desktop app included, with `/right-size-mode effort-only` or `/right-size-mode model-and-effort`. With no value, `/right-size-mode` shows the current mode.
+
 ### Constants
 
 Everything else lives in [`hooks/register.ts`](hooks/register.ts):

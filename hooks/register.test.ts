@@ -116,6 +116,22 @@ test('effort-only ignores an urgent pick for the model', { options: { mode: 'eff
   expect(await turn('t1', 'claude-sonnet-5-5')).toEqual({ model: 'claude-sonnet-5-5', effort: 'xhigh' })
 })
 
+test('/right-size-mode sets the mode option', async ($, on) => {
+  const set: unknown[] = []
+  on('config.set', (_$: any, e: any) => {
+    set.push([e.key, e.value])
+    return { value: e.value }
+  })
+  const { text } = await $.command.run({ command: 'right-size-mode', args: 'effort-only' })
+  expect(text).toBe('right-size mode set to effort-only.')
+  expect(set).toEqual([['right-size.mode', 'effort-only']])
+})
+
+test('/right-size-mode without a value shows the mode', async ($) => {
+  const { text } = await $.command.run({ command: 'right-size-mode', args: '' })
+  expect(text).toBe('right-size mode: model-and-effort. Set it with /right-size-mode model-and-effort or effort-only.')
+})
+
 test('leaves the request alone when the judge fails', async ($, on) => {
   const { turn } = setup($, on, [{ isAnswered: false, reason: 'empty-reply', usage }], 0)
   expect(await turn('t1')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
