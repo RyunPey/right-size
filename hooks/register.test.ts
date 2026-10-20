@@ -24,6 +24,7 @@ const setup = ($: any, on: any, judge: object[], contextTokens: number) => {
     status.push(e.text)
     return { value: undefined }
   })
+  on('turn.complete', (_$: any, e: any) => ({ text: e.answer }))
   on('turn.step', async function* (_$: any, e: any) {
     sent.push({ model: e.model, effort: e.effort })
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: { ...usage, model: ranAs ?? e.model } }
@@ -41,8 +42,11 @@ const setup = ($: any, on: any, judge: object[], contextTokens: number) => {
   const runAs = (model: string) => {
     ranAs = model
   }
+  // The end of a turn with its final answer, on the main loop unless an agentId is given.
+  const complete = (turnId: string, answer: string, agentId?: string) =>
+    $.turn.complete({ turnId, answer, durationMs: 1, isAborted: false, reason: 'completed', agentId })
 
-  return { clock, status, asked, turn, step, runAs }
+  return { clock, status, asked, turn, step, runAs, complete }
 }
 
 test('applies the judge pick', async ($, on) => {
@@ -278,4 +282,41 @@ test('a larger small-chat size lets a hot chat switch', { options: { smallContex
   await clock.advance(60_000)
 
   expect(await turn('t2')).toEqual({ model: 'claude-sonnet-5-5', effort: 'low' })
+})
+
+test('the first judge call has no conversation context', async ($, on) => {
+  const { asked, turn } = setup($, on, [answer('sonnet low normal')], 0)
+  await turn('t1')
+  expect(asked[0]).toBe('Current model: none yet\n\ntask for t1')
+})
+
+test('the judge reads the previous pick and the start of the last answer', async ($, on) => {
+  const { asked, turn, complete } = setup($, on, [answer('sonnet low normal'), answer('sonnet low normal')], 0)
+  await turn('t1')
+  await complete('t1', `Here   is\nthe fix. ${'x'.repeat(400)}`)
+  await turn('t2')
+
+  const lines = asked[1].split('\n')
+  expect(lines[1]).toBe('Previous pick: sonnet low')
+  expect(lines[2]).toBe(`Last answer: Here is the fix. ${'x'.repeat(300 - 'Here is the fix. '.length)}`)
+  expect(asked[1].endsWith('\n\ntask for t2')).toBe(true)
+})
+
+test("a subagent's answer is not the last answer", async ($, on) => {
+  const { asked, turn, complete } = setup($, on, [answer('sonnet low normal'), answer('sonnet low normal')], 0)
+  await turn('t1')
+  await complete('t1', 'main answer')
+  await complete('a1', 'subagent report', 'agent-1')
+  await turn('t2')
+  expect(asked[1]).toContain('Last answer: main answer')
+})
+
+test('/clear drops the previous pick and the last answer from the judge', async ($, on) => {
+  on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
+  const { asked, turn, complete } = setup($, on, [answer('sonnet low normal'), answer('sonnet low normal')], 0)
+  await turn('t1')
+  await complete('t1', 'old answer')
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await turn('t2')
+  expect(asked[1]).toBe('Current model: none yet\n\ntask for t2')
 })

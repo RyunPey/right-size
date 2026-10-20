@@ -26,6 +26,9 @@ const NO_PICK = "right-size: no pick, using session default";
 const CACHE_TTL_MINUTES = 60;
 // Below this many context tokens, re-caching the chat on another model is cheap.
 const SMALL_CONTEXT_TOKENS = 40_000;
+// How much of the last answer and of the prompt the judge reads.
+const ANSWER_CHARS = 300;
+const PROMPT_CHARS = 4000;
 
 const FOLLOW_UP =
   /^(ok(ay)?|go( on)?|yes|yep|y|continue|do it|proceed|sure|thanks?|ty|k)[.!]*$/i;
@@ -33,7 +36,8 @@ const FOLLOW_UP =
 const SYSTEM = `You route coding-assistant prompts. Pick the cheapest model and lowest effort that will still do the task well.
 Models: haiku (trivial: lookups, renames, small edits, quick questions), sonnet (normal coding work, features, bug fixes), opus (hard: architecture, tricky debugging, large refactors, subtle reasoning).
 Efforts: low, medium, high, xhigh, max.
-The first line names the model the chat is on now. Urgent means the prompt is too hard for that model: answer urgent only then, to switch up now even if the chat is mid-cache. Otherwise answer normal.
+The first line names the model the chat is on now. Previous pick and Last answer, when given, show the conversation so far: a follow-up such as "now do the same for X" or "why does it still fail?" is about as hard as the task before it.
+Urgent means the prompt is too hard for that model: answer urgent only then, to switch up now even if the chat is mid-cache. Otherwise answer normal.
 Answer with exactly three words: <model> <effort> <urgent|normal>. Nothing else.`;
 
 // Rank of the session's model, so a pick never goes above what the person chose.
@@ -125,6 +129,8 @@ export const register: Register = (on, options) => {
   });
 
   let pick: Pick | undefined;
+  // The start of the main loop's last answer, so the judge can read a follow-up in context.
+  let lastAnswer = "";
   // Last time each model family answered on the main loop, and the model that last ran.
   const lastUsed = new Map<number, number>();
   let current: string | undefined;
@@ -135,6 +141,7 @@ export const register: Register = (on, options) => {
   on("session.end", async ($, e, next) => {
     if (e.reason === "clear") {
       pick = undefined;
+      lastAnswer = "";
       turn = undefined;
       current = undefined;
       lastUsed.clear();
@@ -159,10 +166,15 @@ export const register: Register = (on, options) => {
     const text = e.text.trim();
     if (pick && FOLLOW_UP.test(text)) return next(e);
 
+    const context = [
+      `Current model: ${current ?? "none yet"}`,
+      pick && `Previous pick: ${pick.tier} ${pick.effort}`,
+      lastAnswer && `Last answer: ${lastAnswer}`,
+    ].filter(Boolean);
     const r = await $.model.complete({
       model: "haiku",
       system: SYSTEM,
-      prompt: `Current model: ${current ?? "none yet"}\n\n${text.slice(0, 4000)}`,
+      prompt: `${context.join("\n")}\n\n${text.slice(0, PROMPT_CHARS)}`,
       maxTokens: 16,
       effort: "low",
       timeoutMs: 5000,
@@ -175,6 +187,13 @@ export const register: Register = (on, options) => {
     // A judge that throws must not leave the last turn's pick in place.
     pick = undefined;
     $.ui.status(NO_PICK);
+    return next(e);
+  });
+
+  on("turn.complete", async ($, e, next) => {
+    if (e.agentId === undefined && e.answer) {
+      lastAnswer = e.answer.replace(/\s+/g, " ").trim().slice(0, ANSWER_CHARS);
+    }
     return next(e);
   });
 

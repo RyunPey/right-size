@@ -4,8 +4,11 @@ All notable changes to right-size are listed here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20
+
 ### Added
 
+- The judge sees the previous pick and the start of the last answer, so follow-ups like "now do the same for X" are judged in context.
 - Plugin manifest metadata: author, homepage, repository, license and keywords.
 - Marketplace description and category.
 - This changelog.
@@ -52,7 +55,8 @@ All notable changes to right-size are listed here. The format follows [Keep a Ch
 
 - First release: a Haiku judge picks model and effort per prompt, a cache guard keeps the current model in big chats with a hot cache, and one status line shows what actually ran.
 
-[Unreleased]: https://github.com/RyunPey/right-size/compare/1d53d59...HEAD
+[Unreleased]: https://github.com/RyunPey/right-size/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/RyunPey/right-size/compare/1d53d59...v0.4.0
 [0.3.1]: https://github.com/RyunPey/right-size/compare/c78410e...1d53d59
 [0.3.0]: https://github.com/RyunPey/right-size/compare/a14d54a...c78410e
 [0.2.0]: https://github.com/RyunPey/right-size/compare/c8d0396...a14d54a
