@@ -97,7 +97,7 @@ def run_case(arm, case, rep, args, workdir):
                     "kept_expected": case.kept_at.get(i), "ran": tier_of(ran), "models": spent,
                     "cost": round(cost, 6), "wall_s": round(time.monotonic() - t0, 1),
                     "pass": bool(not ev.get("is_error") and turn.check(answer)), "steps": ev.get("num_turns"),
-                    "answer": answer[-300:], **(parse_status(status) if arm == "on" else {}),
+                    "answer": answer, **(parse_status(status) if arm == "on" else {}),
                 })
                 prev_cost, prev_usage, models, status, t0 = ev.get("total_cost_usd") or 0, usage, set(), None, time.monotonic()
                 send(len(rows))

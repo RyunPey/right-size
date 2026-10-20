@@ -375,4 +375,15 @@ def next_palindrome(s):
         Turn("unrelated: what's 17 * 23? only the number", number(391), "391", "haiku"),
         Turn("ok", lambda a: True, "", None),
     ], ["multi", "guard"], kept_at={1: True}),
+    # Long chat, then a hard question: the urgent judge pick should switch up over the hot cache (not kept).
+    Case("urgent-up", [
+        Turn("Here is a module of helpers. Exactly one function does not do what its docstring says. Which one? "
+             "Reply with only its name.\n\n```python\n" + HAYSTACK + "```", has(rf"\b{BUGGY}\b"), BUGGY, "sonnet"),
+        Turn("unrelated: what's 17 * 23? only the number", number(391), "391", "haiku"),
+        Turn("Our service deadlocks only under load: two threads take locks A then B in one path and B then A in "
+             "another, but only when a timeout handler runs during the second acquisition. Find the root cause across "
+             "these paths and propose a fix that keeps the transfer atomic. Under 120 words.",
+             has(r"(lock(ing)? order|order of (the )?locks?|opposite order|reverse order|inconsistent order|same order)"),
+             "consistent lock ordering", "opus"),
+    ], ["multi", "guard", "urgent"], kept_at={1: True, 2: False}),
 ]
