@@ -1,5 +1,15 @@
 {
   "name": "right-size",
-  "owner": { "name": "RyunPey" },
-  "plugins": [{ "name": "right-size", "source": "./" }]
+  "owner": { "name": "RyunPey", "url": "https://github.com/RyunPey" },
+  "metadata": {
+    "description": "right-size: the right model and the right effort for every prompt, automatically."
+  },
+  "plugins": [
+    {
+      "name": "right-size",
+      "source": "./",
+      "description": "Picks model and effort per prompt with a quick Haiku judge; shows the pick as one status line.",
+      "category": "productivity"
+    }
+  ]
 }

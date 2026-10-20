@@ -2,6 +2,11 @@
   "name": "right-size",
   "version": "0.3.1",
   "description": "Picks model and effort per prompt with a quick Haiku judge; shows the pick as one status line.",
+  "author": { "name": "RyunPey", "url": "https://github.com/RyunPey" },
+  "homepage": "https://github.com/RyunPey/right-size#readme",
+  "repository": "https://github.com/RyunPey/right-size",
+  "license": "MIT",
+  "keywords": ["model-routing", "effort", "cost", "prompt-cache", "haiku", "sonnet", "opus"],
   "userConfig": {
     "mode": {
       "type": "string",
