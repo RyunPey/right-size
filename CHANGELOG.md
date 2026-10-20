@@ -10,6 +10,11 @@ All notable changes to right-size are listed here. The format follows [Keep a Ch
 - Marketplace description and category.
 - This changelog.
 
+### Fixed
+
+- A judge reply that rambles (for example `opus high (haiku would be too weak)`) no longer parses as the lowest model it mentions; anything but the exact `<model> <effort> [urgent|normal]` answer now falls back to the session default.
+- A judge call that throws no longer reuses the previous turn's pick silently; it falls back to the session default and the status line says so.
+
 ## [0.3.1] - 2026-10-20
 
 ### Added

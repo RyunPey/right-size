@@ -18,6 +18,7 @@ const IDS: Record<Tier, string> = {
 };
 const NAMES = ["haiku", "sonnet", "opus", "fable"];
 const MODES = ["model-and-effort", "effort-only"];
+const NO_PICK = "right-size: no pick, using session default";
 
 // How long a model's prompt cache stays warm after its last request. Claude Code
 // subscriptions mostly get one hour; set 5 minutes for the API's default cache.
@@ -41,11 +42,19 @@ const rankOf = (model: string) => {
   return 3;
 };
 
+// Accepts only the exact answer format, so a reply that rambles falls back instead of guessing.
+const ANSWER = new RegExp(
+  `^(${TIERS.join("|")})\\s+(${EFFORTS.join("|")})(?:\\s+(urgent|normal))?[.!]?$`,
+  "i",
+);
 const parse = (text: string): Pick | undefined => {
-  const words: string[] = text.toLowerCase().match(/[a-z]+/g) ?? [];
-  const tier = TIERS.find((t) => words.includes(t));
-  const effort = EFFORTS.find((x) => words.includes(x));
-  return tier && effort ? { tier, effort, urgent: words.includes("urgent") } : undefined;
+  const m = text.trim().match(ANSWER);
+  if (!m) return undefined;
+  return {
+    tier: m[1].toLowerCase() as Tier,
+    effort: m[2].toLowerCase() as ModelEffort,
+    urgent: m[3]?.toLowerCase() === "urgent",
+  };
 };
 
 // Stays on the current model while its cache is warm and the chat is too big to re-cache cheaply,
@@ -115,12 +124,15 @@ export const register: Register = (on, options) => {
       timeoutMs: 5000,
     });
     pick = r.isAnswered ? parse(r.text) : undefined;
-    $.ui.status(
-      pick ? undefined : "right-size: no pick, using session default",
-    );
+    $.ui.status(pick ? undefined : NO_PICK);
 
     return next(e);
-  }).catch(($, e, next) => next(e));
+  }).catch(($, e, next) => {
+    // A judge that throws must not leave the last turn's pick in place.
+    pick = undefined;
+    $.ui.status(NO_PICK);
+    return next(e);
+  });
 
   on("turn.step", async function* ($, e, next) {
     if (e.agentId !== undefined || !pick) return yield* next(e);

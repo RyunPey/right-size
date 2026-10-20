@@ -11,7 +11,9 @@ const setup = ($: any, on: any, judge: object[], contextTokens: number) => {
   const clock = mock.clock(on, { now: 1_000_000 })
   on('model.complete', (_$: any, e: any) => {
     asked.push(e.prompt)
-    return { value: judge.shift() }
+    const reply = judge.shift()
+    if (reply instanceof Error) throw reply
+    return { value: reply }
   })
   on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: contextTokens, window: 200_000 }, rateLimits: [] } }))
   on('prompt.submit', (_$: any, e: any) => ({ text: e.text }))
@@ -135,4 +137,23 @@ test('/right-size-mode without a value shows the mode', async ($) => {
 test('leaves the request alone when the judge fails', async ($, on) => {
   const { turn } = setup($, on, [{ isAnswered: false, reason: 'empty-reply', usage }], 0)
   expect(await turn('t1')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+})
+
+test('falls back when the judge rambles instead of answering in the format', async ($, on) => {
+  const { status, turn } = setup($, on, [answer('opus high (haiku would be too weak)')], 0)
+  expect(await turn('t1')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+  expect(status).toContain('right-size: no pick, using session default')
+})
+
+test('accepts a well-formed answer with any case and a trailing period', async ($, on) => {
+  const { turn } = setup($, on, [answer(' Sonnet Medium normal.\n')], 0)
+  expect(await turn('t1')).toEqual({ model: 'claude-sonnet-5-5', effort: 'medium' })
+})
+
+test('a judge that throws drops the previous pick and says so', async ($, on) => {
+  const { status, turn } = setup($, on, [answer('sonnet low normal'), new Error('network down')], 0)
+  expect(await turn('t1')).toEqual({ model: 'claude-sonnet-5-5', effort: 'low' })
+
+  expect(await turn('t2')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+  expect(status.at(-1)).toBe('right-size: no pick, using session default')
 })
