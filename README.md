@@ -141,6 +141,19 @@ claude plugin test .
 
 The tests cover the pick, the cache guard (hot, cold, small chat) and the judge-failure fallback with mocked events. They don't exercise a live session.
 
+### 📊 Benchmark
+
+[`bench/`](bench/) runs real headless sessions, with right-size on (loaded from this folder) and off (your baseline, Opus · high by default), and compares cost, time and correctness. It needs Python 3.10+ and spends real money: about $4 for the default run.
+
+```bash
+python bench/bench.py selftest                    # every check accepts a known-good answer
+python bench/bench.py run --max-cost 8            # all cases, 2 reps, both arms
+python bench/bench.py run --tag sneaky --reps 3   # just a subset
+python bench/bench.py report bench/results/<file>.jsonl
+```
+
+Every answer is checked automatically: code runs against tests, and other answers are matched against known results. The report shows which model answered each turn, the pick and effort from the status line, whether routing landed under, at or over the expected tier, and what the cache guard did in the multi-turn cases. Cases live in [`bench/cases.py`](bench/cases.py). The judge's own Haiku call isn't in the reported cost; it's roughly $0.0003 a prompt.
+
 ---
 
 <div align="center">
