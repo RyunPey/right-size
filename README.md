@@ -170,5 +170,7 @@ Every answer is checked automatically: code runs against tests, and other answer
 ---
 
 <div align="center">
+<sub>MIT licensed, see <a href="LICENSE">LICENSE</a>.</sub>
+<br>
 <sub>Built as a calmer take on <a href="https://github.com/HeyCubit/effortless">effortless</a>.</sub>
 </div>
