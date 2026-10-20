@@ -7,8 +7,12 @@ const answer = (text: string) => ({ isAnswered: true, text, usage })
 const setup = ($: any, on: any, judge: object[], contextTokens: number) => {
   const sent: { model: string; effort?: unknown }[] = []
   const status: (string | undefined)[] = []
+  const asked: string[] = []
   const clock = mock.clock(on, { now: 1_000_000 })
-  on('model.complete', () => ({ value: judge.shift() }))
+  on('model.complete', (_$: any, e: any) => {
+    asked.push(e.prompt)
+    return { value: judge.shift() }
+  })
   on('session.usage', () => ({ value: { startedAt: 0, context: { tokens: contextTokens, window: 200_000 }, rateLimits: [] } }))
   on('prompt.submit', (_$: any, e: any) => ({ text: e.text }))
   on('ui.status', (_$: any, e: any) => {
@@ -20,15 +24,15 @@ const setup = ($: any, on: any, judge: object[], contextTokens: number) => {
     return { turnId: e.turnId, index: e.index, answer: '', toolUses: [], stopReason: 'end_turn', usage: { ...usage, model: e.model } }
   })
 
-  // One prompt and one request of a turn on the session's Opus.
-  const turn = async (turnId: string) => {
+  // One prompt and one request of a turn on the session's model (Opus unless given).
+  const turn = async (turnId: string, session = 'claude-opus-5-5') => {
     await $.prompt.submit({ text: `task for ${turnId}` })
-    const stream = $.turn.step({ turnId, index: 0, model: 'claude-opus-5-5', effort: 'high', messageCount: 1 })
+    const stream = $.turn.step({ turnId, index: 0, model: session, effort: 'high', messageCount: 1 })
     for await (const _ of stream) void _
     return sent.at(-1)
   }
 
-  return { clock, status, turn }
+  return { clock, status, asked, turn }
 }
 
 test('applies the judge pick', async ($, on) => {
@@ -59,6 +63,47 @@ test('switches when the cache has gone cold', async ($, on) => {
   await clock.advance(2 * 60 * 60 * 1000)
 
   expect(await turn('t2')).toEqual({ model: 'claude-sonnet-5-5', effort: 'low' })
+})
+
+test('an urgent pick overrides the cache rule and switches up', async ($, on) => {
+  const { clock, turn } = setup($, on, [answer('sonnet low normal'), answer('opus high urgent')], 100_000)
+  await turn('t1')
+  await clock.advance(60_000)
+
+  expect(await turn('t2')).toEqual({ model: 'claude-opus-5-5', effort: 'high' })
+})
+
+test('a normal pick still keeps the hot model', async ($, on) => {
+  const { clock, status, turn } = setup($, on, [answer('sonnet low normal'), answer('opus high normal')], 100_000)
+  await turn('t1')
+  await clock.advance(60_000)
+
+  expect(await turn('t2')).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
+  expect(status.at(-1)).toBe('sonnet · high (kept: cache hot)')
+})
+
+test('the judge is told the model the chat is on', async ($, on) => {
+  const { clock, asked, turn } = setup($, on, [answer('sonnet low normal'), answer('opus high normal')], 100_000)
+  await turn('t1')
+  await clock.advance(60_000)
+  await turn('t2')
+
+  expect(asked[0].startsWith('Current model: none yet')).toBe(true)
+  expect(asked[1].startsWith('Current model: claude-sonnet-5-5')).toBe(true)
+})
+
+test('an urgent pick does not switch down over a hot cache', async ($, on) => {
+  const { clock, status, turn } = setup($, on, [answer('opus high normal'), answer('sonnet low urgent')], 100_000)
+  await turn('t1')
+  await clock.advance(60_000)
+
+  expect(await turn('t2')).toEqual({ model: 'claude-opus-5-5', effort: 'low' })
+  expect(status.at(-1)).toBe('opus · low (kept: cache hot)')
+})
+
+test('never picks above the session model, even when urgent', async ($, on) => {
+  const { turn } = setup($, on, [answer('opus high urgent')], 0)
+  expect(await turn('t1', 'claude-sonnet-5-5')).toEqual({ model: 'claude-sonnet-5-5', effort: 'high' })
 })
 
 test('leaves the request alone when the judge fails', async ($, on) => {

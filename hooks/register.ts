@@ -1,7 +1,7 @@
 import type { EngineInterface, ModelEffort, Register } from "claude-code";
 
 type Tier = "haiku" | "sonnet" | "opus";
-type Pick = { tier: Tier; effort: ModelEffort };
+type Pick = { tier: Tier; effort: ModelEffort; urgent: boolean };
 
 const TIERS: readonly Tier[] = ["haiku", "sonnet", "opus"];
 const EFFORTS: readonly ModelEffort[] = [
@@ -22,14 +22,14 @@ const NAMES = ["haiku", "sonnet", "opus", "fable"];
 // subscriptions mostly get one hour; set 5 minutes for the API's default cache.
 const CACHE_TTL_MS = 60 * 60 * 1000;
 // Below this many context tokens, re-caching the chat on another model is cheap.
-const SMALL_CONTEXT_TOKENS = 40_000;
-const FOLLOW_UP =
+const SMALL_CONTEXT_TOKENS = 40_000;const FOLLOW_UP =
   /^(ok(ay)?|go( on)?|yes|yep|y|continue|do it|proceed|sure|thanks?|ty|k)[.!]*$/i;
 
 const SYSTEM = `You route coding-assistant prompts. Pick the cheapest model and lowest effort that will still do the task well.
 Models: haiku (trivial: lookups, renames, small edits, quick questions), sonnet (normal coding work, features, bug fixes), opus (hard: architecture, tricky debugging, large refactors, subtle reasoning).
 Efforts: low, medium, high, xhigh, max.
-Answer with exactly two words: <model> <effort>. Nothing else.`;
+The first line names the model the chat is on now. Urgent means the prompt is too hard for that model: answer urgent only then, to switch up now even if the chat is mid-cache. Otherwise answer normal.
+Answer with exactly three words: <model> <effort> <urgent|normal>. Nothing else.`;
 
 // Rank of the session's model, so a pick never goes above what the person chose.
 const rankOf = (model: string) => {
@@ -44,28 +44,38 @@ const parse = (text: string): Pick | undefined => {
   const words: string[] = text.toLowerCase().match(/[a-z]+/g) ?? [];
   const tier = TIERS.find((t) => words.includes(t));
   const effort = EFFORTS.find((x) => words.includes(x));
-  return tier && effort ? { tier, effort } : undefined;
+  return tier && effort ? { tier, effort, urgent: words.includes("urgent") } : undefined;
 };
 
-// Stays on the current model while its cache is warm and the chat is too big to re-cache cheaply.
+// Stays on the current model while its cache is warm and the chat is too big to re-cache cheaply,
+// unless the judge marked the prompt urgent and the switch goes up. Never picks above the session's model.
 async function choose(
   $: EngineInterface,
   wanted: string,
+  session: string,
+  urgent: boolean,
   current: string | undefined,
   lastUsed: ReadonlyMap<number, number>,
 ) {
-  if (!current || rankOf(current) === rankOf(wanted)) return { model: wanted, isKept: false };
+  const target = rankOf(wanted) > rankOf(session) ? session : wanted;
+  if (!current || rankOf(current) === rankOf(target)) return { model: target, isKept: false };
+  if (urgent && rankOf(target) > rankOf(current)) return { model: target, isKept: false };
 
   const now = await $.clock.now();
   const isHot = now - (lastUsed.get(rankOf(current)) ?? -Infinity) < CACHE_TTL_MS;
   const { context } = await $.session.usage();
   const isBig = (context.tokens ?? 0) >= SMALL_CONTEXT_TOKENS;
 
-  return isHot && isBig ? { model: current, isKept: true } : { model: wanted, isKept: false };
+  return isHot && isBig ? { model: current, isKept: true } : { model: target, isKept: false };
 }
 
 export const register: Register = (on) => {
   let pick: Pick | undefined;
+  // Last time each model family answered on the main loop, and the model that last ran.
+  const lastUsed = new Map<number, number>();
+  let current: string | undefined;
+  // The model chosen for the running turn: every step of a turn stays on it.
+  let turn: { id: string; model: string; isKept: boolean } | undefined;
 
   on("prompt.submit", async ($, e, next) => {
     if (e.command || e.isMeta) return next(e);
@@ -76,7 +86,7 @@ export const register: Register = (on) => {
     const r = await $.model.complete({
       model: "haiku",
       system: SYSTEM,
-      prompt: text.slice(0, 4000),
+      prompt: `Current model: ${current ?? "none yet"}\n\n${text.slice(0, 4000)}`,
       maxTokens: 16,
       effort: "low",
       timeoutMs: 5000,
@@ -89,17 +99,11 @@ export const register: Register = (on) => {
     return next(e);
   }).catch(($, e, next) => next(e));
 
-  // Last time each model family answered on the main loop, and the model that last ran.
-  const lastUsed = new Map<number, number>();
-  let current: string | undefined;
-  // The model chosen for the running turn: every step of a turn stays on it.
-  let turn: { id: string; model: string; isKept: boolean } | undefined;
-
   on("turn.step", async function* ($, e, next) {
     if (e.agentId !== undefined || !pick) return yield* next(e);
 
     if (turn?.id !== e.turnId) {
-      turn = { id: e.turnId, ...(await choose($, IDS[pick.tier], current, lastUsed)) };
+      turn = { id: e.turnId, ...(await choose($, IDS[pick.tier], e.model, pick.urgent, current, lastUsed)) };
     }
     const { model, isKept } = turn;
     const effort = rankOf(model) === 0 ? undefined : pick.effort;
