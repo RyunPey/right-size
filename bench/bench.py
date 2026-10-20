@@ -1,6 +1,6 @@
 """A/B benchmark for right-size: every case runs headless with the plugin on and off.
 
-  python bench/bench.py run [--reps 2] [--case GLOB ...] [--tag TAG ...] [-j 4] [--max-cost 5]
+  python bench/bench.py run [--reps 2] [--case GLOB ...] [--tag TAG ...] [-j 4] [--max-cost 5] [--shared-cache]
   python bench/bench.py report bench/results/<file>.jsonl
   python bench/bench.py selftest
 
@@ -18,6 +18,7 @@ import sys
 import tempfile
 import threading
 import time
+import uuid
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -50,9 +51,14 @@ def parse_status(text):
 
 
 def command(arm, args):
+    # A unique line in each session's system prompt keeps sessions from reading each other's prompt cache,
+    # so an arm never runs cheaper because the other arm just sent the same prompt.
+    nonce = f"Benchmark session {uuid.uuid4().hex}."
     cmd = [shutil.which("claude") or "claude", "-p", "--input-format", "stream-json", "--output-format",
            "stream-json", "--verbose", "--model", args.baseline_model, "--effort", args.baseline_effort,
            f"--disallowedTools={DISALLOWED}", "--settings", DISABLE_INSTALLED]
+    if not args.shared_cache:
+        cmd += ["--append-system-prompt", nonce]
     return cmd + (["--plugin-dir", str(ROOT)] if arm == "on" else [])
 
 
@@ -230,12 +236,14 @@ if __name__ == "__main__":
     r.add_argument("--reps", type=int, default=2)
     r.add_argument("--arms", type=lambda s: s.split(","), default=["on", "off"])
     r.add_argument("--case", nargs="*", help="name globs")
-    r.add_argument("--tag", nargs="*", help="haiku, sonnet, opus, sneaky, multi, guard")
+    r.add_argument("--tag", nargs="*", help="haiku, sonnet, opus, sneaky, multi, followup, guard, urgent")
     r.add_argument("-j", "--jobs", type=int, default=4)
     r.add_argument("--max-cost", type=float, help="stop starting sessions once this many USD are spent")
     r.add_argument("--baseline-model", default="opus")
     r.add_argument("--baseline-effort", default="high")
     r.add_argument("--timeout", type=int, default=900)
+    r.add_argument("--shared-cache", action="store_true",
+                   help="let sessions share the prompt cache (cheaper, but arms can skew each other's cost)")
     r.add_argument("--out")
     r.set_defaults(fn=run)
     p = sub.add_parser("report")

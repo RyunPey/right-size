@@ -172,7 +172,20 @@ python bench/bench.py run --tag sneaky --reps 3   # just a subset
 python bench/bench.py report bench/results/<file>.jsonl
 ```
 
+Each session gets a unique line in its system prompt, so sessions never share a prompt cache and one arm can't run cheaper because the other just sent the same prompt. Pass `--shared-cache` to turn that off for a cheaper, rougher run.
+
 Every answer is checked automatically: code runs against tests, and other answers are matched against known results. The report shows which model answered each turn, the pick and effort from the status line, whether routing landed under, at or over the expected tier, and what the cache guard did in the multi-turn cases. Cases live in [`bench/cases.py`](bench/cases.py). The judge's own Haiku call isn't in the reported cost; it's roughly $0.0003 a prompt.
+
+Cases tagged `followup` have a second turn that only makes sense after the first ("now the same thing the other way round"), so they test whether the judge reads the conversation.
+
+A case's tier is the smallest model expected to answer it. To check that a case still earns its tier, run it with right-size off on a smaller model:
+
+```bash
+python bench/bench.py run --arms off --baseline-model haiku --baseline-effort low --tag opus
+```
+
+> [!NOTE]
+> In our runs, Sonnet and Haiku passed every case labelled Opus, so correctness can't yet show when routing down hurts. The benchmark measures cost, time and what the judge picks; a case that only Opus solves without tools is still missing.
 
 ---
 

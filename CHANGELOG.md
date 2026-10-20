@@ -4,6 +4,14 @@ All notable changes to right-size are listed here. The format follows [Keep a Ch
 
 ## [Unreleased]
 
+### Added
+
+- Benchmark: two follow-up cases whose second turn only makes sense after the first, to measure whether the judge reads the conversation.
+
+### Changed
+
+- Benchmark sessions no longer share a prompt cache, so one arm can't run cheaper because the other just sent the same prompt. `--shared-cache` restores the old behaviour.
+
 ## [0.4.0] - 2026-10-20
 
 ### Added

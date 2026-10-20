@@ -88,6 +88,55 @@ def haystack(seed=7, count=1000):
 
 HAYSTACK, BUGGY = haystack()
 
+PALINDROME_GOOD = """```python
+def next_palindrome(s):
+    n = len(s)
+    if set(s) == {'9'}: return '1' + '0' * (n - 1) + '1'
+    half = s[:(n + 1) // 2]
+    cand = half + half[:n // 2][::-1]
+    if cand > s: return cand
+    d = list(half); i = len(d) - 1
+    while d[i] == '9': d[i] = '0'; i -= 1
+    d[i] = str(int(d[i]) + 1)
+    half = ''.join(d)
+    return half + half[:n // 2][::-1]
+```"""
+
+
+def range_tests(agg):
+    """Random adds and queries on RangeAdd against a plain list; total(l, r) is checked with agg (sum or max)."""
+    return run_tests(f"""
+        import random
+        random.seed(1)
+        for n in (1, 2, 7, 50):
+            ra, ref = RangeAdd(n), [0] * n
+            for _ in range(400):
+                l = random.randrange(n); r = random.randrange(l, n)
+                if random.random() < .5:
+                    v = random.randint(-9, 9); ra.add(l, r, v)
+                    for k in range(l, r + 1): ref[k] += v
+                else:
+                    assert ra.total(l, r) == {agg}(ref[l:r + 1])
+    """)
+
+
+PALINDROME_TESTS = """
+        def slow(s):
+            n = int(s) + 1
+            while str(n) != str(n)[::-1]: n += 1
+            return str(n)
+        for k in list(range(1, 2500)) + [9999, 10001, 12921, 99899, 123456, 199991, 808, 1991]:
+            assert next_palindrome(str(k)) == slow(str(k)), k
+        big = '7' + '9' * 30000 + '8'
+        assert next_palindrome(big) == '8' + '0' * 30000 + '8'
+        assert next_palindrome('9' * 40001) == '1' + '0' * 40000 + '1'
+        mid = '12' + '9' * 20001 + '35'
+        assert next_palindrome(mid) == '13' + '0' * 20001 + '31'
+"""
+PALINDROME_PROMPT = ("Write a Python function next_palindrome(s) that takes a positive integer as a decimal string "
+                     "without leading zeros (up to 100000 digits) and returns the smallest palindrome strictly greater "
+                     "than it, as a string. It must run in linear time.")
+
 CASES = [
     # --- trivial ---
     single("camel", "haiku", "Convert the identifier hello_world_example to camelCase. Reply with only the result.",
@@ -256,19 +305,7 @@ print(sum(len(list(f(1))) for f in fs[1:]), first.__class__ is g.__class__)""",
     single("rangesum", "opus",
            "Implement a Python class RangeAdd(n) over an array of n zeros supporting add(l, r, v) (add v to every "
            "index in [l, r], inclusive) and total(l, r) (sum over [l, r], inclusive), both O(log n)." + CODE_RULE,
-           run_tests("""
-        import random
-        random.seed(1)
-        for n in (1, 2, 7, 50):
-            ra, ref = RangeAdd(n), [0] * n
-            for _ in range(400):
-                l = random.randrange(n); r = random.randrange(l, n)
-                if random.random() < .5:
-                    v = random.randint(-9, 9); ra.add(l, r, v)
-                    for k in range(l, r + 1): ref[k] += v
-                else:
-                    assert ra.total(l, r) == sum(ref[l:r + 1])
-    """), """```python
+           range_tests("sum"), """```python
 class RangeAdd:
     def __init__(self, n): self.n, self.a, self.b = n, [0]*(n+2), [0]*(n+2)
     def _u(self, t, i, v):
@@ -329,34 +366,7 @@ def median(a, b):
         elif al > br: hi = i - 1
         else: lo = i + 1
 ```"""),
-    single("palindrome", "opus",
-           "Write a Python function next_palindrome(s) that takes a positive integer as a decimal string without "
-           "leading zeros (up to 100000 digits) and returns the smallest palindrome strictly greater than it, as a "
-           "string. It must run in linear time." + CODE_RULE, run_tests("""
-        def slow(s):
-            n = int(s) + 1
-            while str(n) != str(n)[::-1]: n += 1
-            return str(n)
-        for k in list(range(1, 2500)) + [9999, 10001, 12921, 99899, 123456, 199991, 808, 1991]:
-            assert next_palindrome(str(k)) == slow(str(k)), k
-        big = '7' + '9' * 30000 + '8'
-        assert next_palindrome(big) == '8' + '0' * 30000 + '8'
-        assert next_palindrome('9' * 40001) == '1' + '0' * 40000 + '1'
-        mid = '12' + '9' * 20001 + '35'
-        assert next_palindrome(mid) == '13' + '0' * 20001 + '31'
-    """), """```python
-def next_palindrome(s):
-    n = len(s)
-    if set(s) == {'9'}: return '1' + '0' * (n - 1) + '1'
-    half = s[:(n + 1) // 2]
-    cand = half + half[:n // 2][::-1]
-    if cand > s: return cand
-    d = list(half); i = len(d) - 1
-    while d[i] == '9': d[i] = '0'; i -= 1
-    d[i] = str(int(d[i]) + 1)
-    half = ''.join(d)
-    return half + half[:n // 2][::-1]
-```"""),
+    single("palindrome", "opus", PALINDROME_PROMPT + CODE_RULE, run_tests(PALINDROME_TESTS), PALINDROME_GOOD),
 
     # --- sound trivial, need real reasoning ---
     single("sneaky", "opus",
@@ -369,6 +379,75 @@ def next_palindrome(s):
            number(4), "4", ["sneaky"]),
 
     # --- multi-turn: cache guard and follow-ups ---
+    # Context-dependent follow-ups: turn 1 only makes sense after turn 0 and is as hard as it.
+    Case("followup-pal", [
+        Turn(PALINDROME_PROMPT + CODE_RULE, run_tests(PALINDROME_TESTS), PALINDROME_GOOD, "opus"),
+        Turn("nice. now the same thing the other way round: prev_palindrome(s), the largest palindrome strictly "
+             "smaller than s (s > 1)." + CODE_RULE, run_tests("""
+        def slow(s):
+            n = int(s) - 1
+            while str(n) != str(n)[::-1]: n -= 1
+            return str(n)
+        for k in list(range(2, 2500)) + [9999, 10001, 12921, 99899, 123456, 199991, 808, 1991, 100, 101, 110, 1000]:
+            assert prev_palindrome(str(k)) == slow(str(k)), k
+        assert prev_palindrome('1' + '0' * 30000) == '9' * 30000
+        assert prev_palindrome('1' + '0' * 39999 + '1') == '9' * 40000
+        assert prev_palindrome('13' + '0' * 20001 + '31') == '12' + '9' * 20001 + '21'
+        assert prev_palindrome('8' + '0' * 30000 + '9') == '8' + '0' * 30000 + '8'
+    """), """```python
+def prev_palindrome(s):
+    n = len(s)
+    if s == '1' + '0' * (n - 2) + '1' and n > 1 or s == '1' + '0' * (n - 1):
+        return '9' * (n - 1)
+    half = s[:(n + 1) // 2]
+    cand = half + half[:n // 2][::-1]
+    if cand < s: return cand
+    d = list(half); i = len(d) - 1
+    while d[i] == '0': d[i] = '9'; i -= 1
+    d[i] = str(int(d[i]) - 1)
+    if d[0] == '0': return '9' * (n - 1)
+    half = ''.join(d)
+    return half + half[:n // 2][::-1]
+```""", "opus"),
+        Turn("unrelated: what's 2**10? only the number", number(1024), "1024", "haiku"),
+    ], ["multi", "followup"]),
+    Case("followup-max", [
+        Turn("Implement a Python class RangeAdd(n) over an array of n zeros supporting add(l, r, v) (add v to every "
+             "index in [l, r], inclusive) and total(l, r) (sum over [l, r], inclusive), both O(log n)." + CODE_RULE,
+             range_tests("sum"), """```python
+class RangeAdd:
+    def __init__(self, n): self.n, self.a, self.b = n, [0]*(n+2), [0]*(n+2)
+    def _u(self, t, i, v):
+        i += 1
+        while i <= self.n + 1: t[i] += v; i += i & -i
+    def _q(self, t, i):
+        i += 1; s = 0
+        while i > 0: s += t[i]; i -= i & -i
+        return s
+    def _pre(self, i): return self._q(self.a, i) * (i + 1) - self._q(self.b, i) if i >= 0 else 0
+    def add(self, l, r, v):
+        self._u(self.a, l, v); self._u(self.a, r+1, -v); self._u(self.b, l, v*l); self._u(self.b, r+1, -v*(r+1))
+    def total(self, l, r): return self._pre(r) - self._pre(l-1)
+```""", "opus"),
+        Turn("same class, but total(l, r) should now return the max over the range instead of the sum. still "
+             "O(log n) for both." + CODE_RULE, range_tests("max"), """```python
+class RangeAdd:
+    def __init__(self, n): self.n, self.mx, self.lz = n, [0]*(4*n), [0]*(4*n)
+    def _add(self, o, lo, hi, l, r, v):
+        if r < lo or hi < l: return
+        if l <= lo and hi <= r: self.mx[o] += v; self.lz[o] += v; return
+        m = (lo + hi) // 2
+        self._add(2*o, lo, m, l, r, v); self._add(2*o+1, m+1, hi, l, r, v)
+        self.mx[o] = max(self.mx[2*o], self.mx[2*o+1]) + self.lz[o]
+    def _q(self, o, lo, hi, l, r):
+        if r < lo or hi < l: return float('-inf')
+        if l <= lo and hi <= r: return self.mx[o]
+        m = (lo + hi) // 2
+        return max(self._q(2*o, lo, m, l, r), self._q(2*o+1, m+1, hi, l, r)) + self.lz[o]
+    def add(self, l, r, v): self._add(1, 0, self.n-1, l, r, v)
+    def total(self, l, r): return self._q(1, 0, self.n-1, l, r)
+```""", "opus"),
+    ], ["multi", "followup"]),
     Case("guard-big", [
         Turn("Here is a module of helpers. Exactly one function does not do what its docstring says. Which one? "
              "Reply with only its name.\n\n```python\n" + HAYSTACK + "```", has(rf"\b{BUGGY}\b"), BUGGY, "sonnet"),
