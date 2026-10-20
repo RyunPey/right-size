@@ -1,0 +1,5 @@
+{
+  "name": "right-size",
+  "owner": { "name": "RyunPey" },
+  "plugins": [{ "name": "right-size", "source": "./" }]
+}
