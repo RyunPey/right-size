@@ -98,16 +98,24 @@ Edits take effect after `/reload-plugins`, with no reinstall.
 
 ## 🎛️ Tuning
 
-### Mode
+### Settings
 
-One setting, `mode`, in the plugin's config menu:
+Three settings in the plugin's config menu (`/config`):
+
+| Setting | Default | What it controls |
+| --- | --- | --- |
+| `mode` | `model-and-effort` | Whether right-size picks the model as well as the effort. See below. |
+| `cacheTtlMinutes` | `60` | How long a model's cache counts as hot after its last request. 60 suits Claude Code subscriptions; set 5 if your account uses the API's default cache. |
+| `smallContextTokens` | `40000` | Below this context size, switching models is always allowed. |
+
+### Mode
 
 | Value | What it does |
 | --- | --- |
 | `model-and-effort` (default) | Picks model and effort per prompt; the cache guard decides when a switch is worth it. |
 | `effort-only` | Keeps your session's model on every turn and changes only the effort. The prompt cache is never lost. |
 
-Change it from any surface, the desktop app included, with `/right-size-mode effort-only` or `/right-size-mode model-and-effort`. With no value, `/right-size-mode` shows the current mode.
+Change it from any surface, the desktop app included, with `/right-size-mode effort-only` or `/right-size-mode model-and-effort`. With no value, `/right-size-mode` shows the current mode. A change counts from the next turn.
 
 ### Constants
 
@@ -118,8 +126,7 @@ Everything else lives in [`hooks/register.ts`](hooks/register.ts):
 | `SYSTEM` | The judge's instructions. Edit it to change how eagerly it picks bigger models. |
 | `IDS` | Which model id each pick maps to. |
 | `FOLLOW_UP` | The pattern for replies that skip the judge. |
-| `CACHE_TTL_MS` | How long a model's cache counts as hot after its last request. 1 hour by default; set 5 minutes if your account uses the API's default cache. |
-| `SMALL_CONTEXT_TOKENS` | Below this context size (40k tokens by default), switching models is always allowed. |
+| `CACHE_TTL_MINUTES`, `SMALL_CONTEXT_TOKENS` | The defaults for the two settings above. |
 
 ## 🧊 The cache guard
 
@@ -139,7 +146,7 @@ The model is decided once per turn, so tool calls inside a turn never switch. Wh
 opus · low (kept: cache hot)
 ```
 
-Chat size comes from the session's live context figures. Before the first reply of a session (or right after compaction), the size is unknown and counts as small.
+Chat size comes from the session's live context figures. Before the first reply of a session (or right after compaction), the size is unknown and counts as small. `/clear` and compaction also forget which model's cache was hot, since neither cache holds the new chat; `/clear` forgets the last pick too, so a short reply after it is judged afresh.
 
 ## 💸 Costs
 
@@ -152,7 +159,7 @@ claude plugin validate .
 claude plugin test .
 ```
 
-The tests cover the pick, the cache guard (hot, cold, small chat) and the judge-failure fallback with mocked events. They don't exercise a live session.
+The tests cover the pick, the cache guard (hot, cold, small chat, `/clear`, compaction), the settings, follow-ups, pass-through prompts and the judge-failure fallbacks with mocked events. They don't exercise a live session.
 
 ### 📊 Benchmark
 

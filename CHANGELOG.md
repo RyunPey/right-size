@@ -9,11 +9,17 @@ All notable changes to right-size are listed here. The format follows [Keep a Ch
 - Plugin manifest metadata: author, homepage, repository, license and keywords.
 - Marketplace description and category.
 - This changelog.
+- `cacheTtlMinutes` and `smallContextTokens` settings, so the cache guard can be tuned without editing source.
+- CI on GitHub Actions: plugin validation, plugin tests and the benchmark selftest.
+- Tests for follow-ups, slash commands, subagent steps, Haiku picks without effort, the `(ran …)` note, `/clear` and compaction.
 
 ### Fixed
 
 - A judge reply that rambles (for example `opus high (haiku would be too weak)`) no longer parses as the lowest model it mentions; anything but the exact `<model> <effort> [urgent|normal]` answer now falls back to the session default.
 - A judge call that throws no longer reuses the previous turn's pick silently; it falls back to the session default and the status line says so.
+- A mode set with `/right-size-mode` now applies from the next turn, and `/right-size-mode` shows the current value instead of the one loaded at startup.
+- `/clear` forgets the previous conversation's pick and cache state; compaction forgets the cache state.
+- An unrecognized model id shows by its own name in the status line instead of as `fable`.
 
 ## [0.3.1] - 2026-10-20
 

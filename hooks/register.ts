@@ -20,11 +20,14 @@ const NAMES = ["haiku", "sonnet", "opus", "fable"];
 const MODES = ["model-and-effort", "effort-only"];
 const NO_PICK = "right-size: no pick, using session default";
 
+// Defaults for the cacheTtlMinutes and smallContextTokens options.
 // How long a model's prompt cache stays warm after its last request. Claude Code
 // subscriptions mostly get one hour; set 5 minutes for the API's default cache.
-const CACHE_TTL_MS = 60 * 60 * 1000;
+const CACHE_TTL_MINUTES = 60;
 // Below this many context tokens, re-caching the chat on another model is cheap.
-const SMALL_CONTEXT_TOKENS = 40_000;const FOLLOW_UP =
+const SMALL_CONTEXT_TOKENS = 40_000;
+
+const FOLLOW_UP =
   /^(ok(ay)?|go( on)?|yes|yep|y|continue|do it|proceed|sure|thanks?|ty|k)[.!]*$/i;
 
 const SYSTEM = `You route coding-assistant prompts. Pick the cheapest model and lowest effort that will still do the task well.
@@ -34,13 +37,16 @@ The first line names the model the chat is on now. Urgent means the prompt is to
 Answer with exactly three words: <model> <effort> <urgent|normal>. Nothing else.`;
 
 // Rank of the session's model, so a pick never goes above what the person chose.
+// An id no family matches ranks above them all, so it never caps a pick.
 const rankOf = (model: string) => {
   const m = model.toLowerCase();
   if (m.includes("haiku")) return 0;
   if (m.includes("sonnet")) return 1;
   if (m.includes("opus")) return 2;
-  return 3;
+  if (m.includes("fable")) return 3;
+  return 4;
 };
+const nameOf = (model: string) => NAMES[rankOf(model)] ?? model;
 
 // Accepts only the exact answer format, so a reply that rambles falls back instead of guessing.
 const ANSWER = new RegExp(
@@ -57,6 +63,8 @@ const parse = (text: string): Pick | undefined => {
   };
 };
 
+type Limits = { cacheTtlMs: number; smallContextTokens: number };
+
 // Stays on the current model while its cache is warm and the chat is too big to re-cache cheaply,
 // unless the judge marked the prompt urgent and the switch goes up. Never picks above the session's model.
 async function choose(
@@ -66,22 +74,35 @@ async function choose(
   urgent: boolean,
   current: string | undefined,
   lastUsed: ReadonlyMap<number, number>,
+  limits: Limits,
 ) {
   const target = rankOf(wanted) > rankOf(session) ? session : wanted;
   if (!current || rankOf(current) === rankOf(target)) return { model: target, isKept: false };
   if (urgent && rankOf(target) > rankOf(current)) return { model: target, isKept: false };
 
   const now = await $.clock.now();
-  const isHot = now - (lastUsed.get(rankOf(current)) ?? -Infinity) < CACHE_TTL_MS;
+  const isHot = now - (lastUsed.get(rankOf(current)) ?? -Infinity) < limits.cacheTtlMs;
   const { context } = await $.session.usage();
-  const isBig = (context.tokens ?? 0) >= SMALL_CONTEXT_TOKENS;
+  const isBig = (context.tokens ?? 0) >= limits.smallContextTokens;
 
   return isHot && isBig ? { model: current, isKept: true } : { model: target, isKept: false };
 }
 
+// The mode as /config holds it now, so a change made after this module loaded counts on the next turn;
+// the loaded option when the menu can't be read. effort-only keeps the session's model on every turn.
+async function modeOf($: EngineInterface, loaded: unknown) {
+  const row = await $.config
+    .list()
+    .then((rows) => rows.find((r) => r.key === "right-size.mode"))
+    .catch(() => undefined);
+  return (row?.value ?? loaded) === "effort-only" ? "effort-only" : "model-and-effort";
+}
+
 export const register: Register = (on, options) => {
-  // effort-only keeps the session's model on every turn, so no cache is ever lost.
-  const isEffortOnly = options?.mode === "effort-only";
+  const limits: Limits = {
+    cacheTtlMs: Number(options?.cacheTtlMinutes ?? CACHE_TTL_MINUTES) * 60 * 1000,
+    smallContextTokens: Number(options?.smallContextTokens ?? SMALL_CONTEXT_TOKENS),
+  };
 
   // /right-size-mode switches the mode from any surface, the desktop app included.
   on("session.start", async ($, e, next) => {
@@ -95,19 +116,42 @@ export const register: Register = (on, options) => {
 
   on("command.run", { command: "right-size-mode" }, async ($, e) => {
     const value = e.args.trim();
-    const now = isEffortOnly ? "effort-only" : "model-and-effort";
+    const now = await modeOf($, options?.mode);
     if (!MODES.includes(value)) {
       return { text: `right-size mode: ${now}. Set it with /right-size-mode ${MODES.join(" or ")}.` };
     }
     const { deny } = await $.config.set({ key: "right-size.mode", value });
     return { text: deny ? `right-size mode not changed: ${deny}` : `right-size mode set to ${value}.` };
   });
+
   let pick: Pick | undefined;
   // Last time each model family answered on the main loop, and the model that last ran.
   const lastUsed = new Map<number, number>();
   let current: string | undefined;
   // The model chosen for the running turn: every step of a turn stays on it.
   let turn: { id: string; model: string; isKept: boolean } | undefined;
+
+  // /clear starts a new conversation in the same process: nothing of the old one carries over.
+  on("session.end", async ($, e, next) => {
+    if (e.reason === "clear") {
+      pick = undefined;
+      turn = undefined;
+      current = undefined;
+      lastUsed.clear();
+    }
+    return next(e);
+  });
+
+  // Compaction replaces the chat, so no model's cache holds it any more. The pick and the
+  // running turn stay: an auto-compaction mid-turn must not drop the turn back to the default.
+  on("session.compact", async ($, e, next) => {
+    const result = await next(e);
+    if (e.agentId === undefined && e.trigger !== "precompute" && !("skip" in result)) {
+      current = undefined;
+      lastUsed.clear();
+    }
+    return result;
+  }).catch(($, e, next) => next(e));
 
   on("prompt.submit", async ($, e, next) => {
     if (e.command || e.isMeta) return next(e);
@@ -140,17 +184,14 @@ export const register: Register = (on, options) => {
     if (turn?.id !== e.turnId) {
       turn = {
         id: e.turnId,
-        ...(isEffortOnly
+        ...((await modeOf($, options?.mode)) === "effort-only"
           ? { model: e.model, isKept: false }
-          : await choose($, IDS[pick.tier], e.model, pick.urgent, current, lastUsed)),
+          : await choose($, IDS[pick.tier], e.model, pick.urgent, current, lastUsed, limits)),
       };
     }
     const { model, isKept } = turn;
     const effort = rankOf(model) === 0 ? undefined : pick.effort;
-    const label = (id: string) => {
-      const name = NAMES[rankOf(id)] ?? id;
-      return effort ? `${name} · ${effort}` : name;
-    };
+    const label = (id: string) => (effort ? `${nameOf(id)} · ${effort}` : nameOf(id));
 
     const result = yield* next({ ...e, model, effort });
 

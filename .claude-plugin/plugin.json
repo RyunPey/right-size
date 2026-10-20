@@ -17,6 +17,18 @@
         "model-and-effort",
         "effort-only"
       ]
+    },
+    "cacheTtlMinutes": {
+      "type": "number",
+      "title": "Cache lifetime (minutes)",
+      "description": "How long a model's prompt cache counts as hot after its last request. 60 for Claude Code subscriptions; 5 if your account uses the API's default cache.",
+      "default": 60
+    },
+    "smallContextTokens": {
+      "type": "number",
+      "title": "Small chat size (tokens)",
+      "description": "Below this context size, switching models is always allowed: re-reading the chat on another model is cheap.",
+      "default": 40000
     }
   }
 }
