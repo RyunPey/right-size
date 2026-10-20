@@ -185,7 +185,7 @@ python bench/bench.py run --arms off --baseline-model haiku --baseline-effort lo
 ```
 
 > [!NOTE]
-> In our runs, Sonnet and Haiku passed every case labelled Opus, so correctness can't yet show when routing down hurts. The benchmark measures cost, time and what the judge picks; a case that only Opus solves without tools is still missing.
+> Most cases labelled Opus are passed by Sonnet and Haiku too. So far only `rangesum` (and the same task as the first turn of `followup-max`) has failed below Opus, on Sonnet · medium about half the time, so correctness shows little about when routing down hurts. More cases that only Opus solves would sharpen that.
 
 ---
 
